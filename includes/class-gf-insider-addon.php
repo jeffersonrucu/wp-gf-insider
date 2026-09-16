@@ -111,7 +111,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 			),
 			array(
 				'title'       => esc_html__( 'Identificação do contato', 'gf-insider' ),
-				'description' => esc_html__( 'A Insider precisa de pelo menos um entre identificador único, e-mail e telefone. Sem nenhum deles o envio é ignorado.', 'gf-insider' ),
+				'description' => esc_html__( 'A Insider precisa de pelo menos um identificador: uuid, e-mail, telefone ou um dos identificadores próprios abaixo. Sem nenhum deles o envio é ignorado.', 'gf-insider' ),
 				'fields'      => array(
 					array(
 						'name'      => 'contact',
@@ -141,10 +141,24 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 							),
 							array(
 								'name'       => 'uuid',
-								'label'      => esc_html__( 'Identificador único', 'gf-insider' ),
-								'tooltip'    => esc_html__( 'O que identifica a pessoa na base da Insider, por exemplo o CPF.', 'gf-insider' ),
+								'label'      => esc_html__( 'ID do usuário (uuid)', 'gf-insider' ),
+								'tooltip'    => esc_html__( 'O identificador principal da Insider: o id que a pessoa já tem no seu sistema. Deixe vazio se o formulário não souber esse id.', 'gf-insider' ),
 								'field_type' => array( 'text', 'number', 'email', 'hidden' ),
 							),
+						),
+					),
+					array(
+						'name'        => 'customIdentifiers',
+						'label'       => esc_html__( 'Outros identificadores', 'gf-insider' ),
+						'type'        => 'generic_map',
+						'tooltip'     => esc_html__( 'Identificador adicional com nome próprio, como o CPF: chega na Insider como c_cpf e une este contato ao que o back-end já enviou. Não substitui o uuid.', 'gf-insider' ),
+						'key_field'   => array(
+							'title'   => esc_html__( 'Nome do identificador', 'gf-insider' ),
+							'choices' => array(),
+						),
+						'value_field' => array(
+							'title'   => esc_html__( 'Campo do formulário', 'gf-insider' ),
+							'choices' => self::attribute_choices(),
 						),
 					),
 				),
@@ -285,7 +299,8 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 		$user = GF_Insider_Payload::user(
 			$this->mapped_values( $feed, 'contact', $form, $entry ),
 			$this->mapped_values( $feed, 'optins', $form, $entry ),
-			$this->get_generic_map_fields( $feed, 'userAttributes', $form, $entry )
+			$this->get_generic_map_fields( $feed, 'userAttributes', $form, $entry ),
+			$this->get_generic_map_fields( $feed, 'customIdentifiers', $form, $entry )
 		);
 
 		$event = GF_Insider_Payload::event(

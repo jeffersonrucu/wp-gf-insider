@@ -86,6 +86,56 @@ check(
 );
 check( 'evento sem nome', GF_Insider_Payload::event( '  ' ), array() );
 
+// Custom identifiers: o CPF entra como identificador próprio, não no uuid.
+check(
+	'identificador próprio',
+	GF_Insider_Payload::user(
+		array( 'name' => 'Maria da Silva' ),
+		array( 'gdpr_optin' => '1' ),
+		array(),
+		array( 'cpf' => '529.982.247-25' )
+	),
+	array(
+		'name'               => 'Maria',
+		'surname'            => 'da Silva',
+		// Sem pontuação: é assim que o back-end do cliente manda o mesmo CPF.
+		'custom_identifiers' => array( 'cpf' => '52998224725' ),
+		'gdpr_optin'         => true,
+	)
+);
+
+check(
+	'identificador não numérico fica como veio',
+	GF_Insider_Payload::user( array(), array(), array(), array( 'matricula' => 'AB-123' ) ),
+	array( 'custom_identifiers' => array( 'matricula' => 'AB-123' ) )
+);
+
+// Número continua número: como string a Insider não segmenta por faixa.
+check(
+	'atributo numérico',
+	GF_Insider_Payload::user( array( 'email' => 'a@b.com.br' ), array(), array( 'valor' => '15000', 'parcelas' => '12' ) ),
+	array( 'email' => 'a@b.com.br', 'custom' => array( 'valor' => 15000, 'parcelas' => 12 ) )
+);
+
+check(
+	'decimal',
+	GF_Insider_Payload::user( array( 'email' => 'a@b.com.br' ), array(), array( 'valor' => '458.33' ) ),
+	array( 'email' => 'a@b.com.br', 'custom' => array( 'valor' => 458.33 ) )
+);
+
+// Zero à esquerda é código, não quantidade.
+check(
+	'CEP não vira número',
+	GF_Insider_Payload::user( array( 'email' => 'a@b.com.br' ), array(), array( 'cep' => '01310' ) ),
+	array( 'email' => 'a@b.com.br', 'custom' => array( 'cep' => '01310' ) )
+);
+
+check(
+	'identificador vazio não identifica',
+	GF_Insider_Payload::user( array( 'name' => 'Maria da Silva' ), array(), array(), array( 'cpf' => '' ) ),
+	array()
+);
+
 if ( 0 === $failures ) {
 	echo "ok\n";
 	exit( 0 );

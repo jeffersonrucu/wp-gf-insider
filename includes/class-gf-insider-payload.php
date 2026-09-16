@@ -81,13 +81,14 @@ final class GF_Insider_Payload {
 	}
 
 	/**
-	 * @param array<string, mixed> $contact Values keyed by CONTACT_KEYS.
-	 * @param array<string, mixed> $optins  Values keyed by OPTIN_KEYS.
-	 * @param array<string, mixed> $custom  Custom attributes, already keyed.
+	 * @param array<string, mixed> $contact     Values keyed by CONTACT_KEYS.
+	 * @param array<string, mixed> $optins      Values keyed by OPTIN_KEYS.
+	 * @param array<string, mixed> $custom      Custom attributes, already keyed.
+	 * @param array<string, mixed> $identifiers Custom identifiers, already keyed.
 	 *
 	 * @return array<string, mixed> Empty when there is no identifier to send.
 	 */
-	public static function user( array $contact, array $optins = array(), array $custom = array() ): array {
+	public static function user( array $contact, array $optins = array(), array $custom = array(), array $identifiers = array() ): array {
 		$user = array();
 
 		foreach ( self::CONTACT_KEYS as $key ) {
@@ -121,9 +122,18 @@ final class GF_Insider_Payload {
 			}
 		}
 
+		$identifiers = array_map(
+			static fn ( $value ): string => self::identifier( (string) $value ),
+			self::clean( $identifiers )
+		);
+
 		// Without one of these Insider has no contact to attach the event to.
-		if ( ! isset( $user['uuid'] ) && ! isset( $user['email'] ) && ! isset( $user['phone_number'] ) ) {
+		if ( ! isset( $user['uuid'] ) && ! isset( $user['email'] ) && ! isset( $user['phone_number'] ) && array() === $identifiers ) {
 			return array();
+		}
+
+		if ( array() !== $identifiers ) {
+			$user['custom_identifiers'] = $identifiers;
 		}
 
 		foreach ( self::OPTIN_KEYS as $key ) {
@@ -165,6 +175,34 @@ final class GF_Insider_Payload {
 	}
 
 	/**
+	 * A base do cliente guarda documento sem pontuação, e um identificador que
+	 * difere num ponto cria um segundo perfil em vez de unir os dois.
+	 */
+	private static function identifier( string $value ): string {
+		return preg_match( '#^[\d.\-/]+$#', $value ) === 1
+			? (string) preg_replace( '/\D/', '', $value )
+			: $value;
+	}
+
+	/**
+	 * A number stays a number: as a string Insider cannot segment it by range.
+	 * A leading zero means the value is a code, not a quantity.
+	 *
+	 * @return int|float|string
+	 */
+	private static function scalar( string $value ) {
+		if ( preg_match( '/^(0|[1-9]\d*)$/', $value ) === 1 ) {
+			return (int) $value;
+		}
+
+		if ( preg_match( '/^(0|[1-9]\d*)\.\d+$/', $value ) === 1 ) {
+			return (float) $value;
+		}
+
+		return $value;
+	}
+
+	/**
 	 * @param array<string, mixed> $values
 	 *
 	 * @return array<string, mixed>
@@ -182,7 +220,7 @@ final class GF_Insider_Payload {
 			$value = trim( (string) $value );
 
 			if ( '' !== $value ) {
-				$clean[ $key ] = $value;
+				$clean[ $key ] = self::scalar( $value );
 			}
 		}
 
