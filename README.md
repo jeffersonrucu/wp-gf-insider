@@ -1,52 +1,49 @@
 # Insider for Gravity Forms
 
-Add-on que entrega os envios do Gravity Forms à [Insider](https://useinsider.com)
-e publica a tag do SDK no site. Cada formulário ganha um *feed* onde você escolhe,
-**pelo painel**, qual campo vira o e-mail, o telefone, o nome e o identificador do
-contato, quais campos viram atributos e quais viram parâmetros do evento.
+Sends Gravity Forms submissions to [Insider](https://useinsider.com) and prints the
+Insider tag. One feed per form, mapped in the admin — no code.
 
-## Como funciona
+![Feed list](docs/feed-list.png)
 
-O envio acontece no **navegador de quem preencheu**, pela `window.InsiderQueue`,
-e não por chamada de API do servidor. A diferença importa:
+## How it works
 
-- O lead fica ligado à sessão que a Insider já reconhece, então a pessoa é a mesma
-  que navegou, viu as campanhas e pode receber web push. Um `upsert` server-side
-  cria o contato sem essa ligação.
-- Os **valores vêm do servidor**, montados a partir do registro salvo. Um formulário
-  de várias etapas envia todos os campos, e não só os da última tela — que é o que
-  aconteceria lendo o DOM no submit.
+The push runs **in the visitor's browser**, through `window.InsiderQueue`, not through
+a server-side API call. Two reasons:
 
-Na prática, o plugin anexa à confirmação do formulário um bloco como este:
+- The lead stays tied to the session Insider already knows, so it is the same person
+  who browsed the site and can receive web push. A server-side upsert loses that link.
+- The **values come from the server**, built from the saved entry, so a multi-page form
+  sends every field — not just the last screen.
+
+What the plugin appends to the form confirmation:
 
 ```js
 window.InsiderQueue.push({ type: 'user', value: {
-  email: 'maria@exemplo.com.br',
+  email: 'maria@example.com',
   phone_number: '+5531988887777',
-  name: 'Maria', surname: 'da Silva',
+  name: 'Maria', surname: 'Silva',
   custom_identifiers: { cpf: '52998224725' },
   gdpr_optin: true,
-  custom: { cidade: 'Belo Horizonte', valor_emprestimo: 15000 }
+  custom: { city: 'Belo Horizonte', loan_amount: 15000 }
 }});
 window.InsiderQueue.push({ type: 'custom_event', value: [{
-  event_name: 'lead_contato',
-  event_parameters: { custom: { form_name: 'Contato' } }
+  event_name: 'lead_contact',
+  event_parameters: { custom: { form_name: 'Contact' } }
 }]});
 ```
 
-## Requisitos
+## Requirements
 
-- WordPress 5.9+, PHP 7.4+
-- Gravity Forms 2.5+
-- Uma conta Insider, com o **domínio do site liberado** (sem isso o SDK carrega mas
-  não envia nada)
+WordPress 5.9+ · PHP 7.4+ · Gravity Forms 2.5+ · an Insider account with **your domain
+allowed** (without it the SDK loads but sends nothing).
 
-## Instalação
+## Install
 
-Baixe o `.zip` da [última release](https://github.com/jeffersonrucu/wp-gf-insider/releases)
-e instale por **Plugins › Adicionar novo › Enviar plugin**.
+Download the `.zip` from the [latest release](https://github.com/jeffersonrucu/wp-gf-insider/releases)
+and install it under **Plugins › Add New › Upload Plugin**.
 
-Em projetos com Composer:
+<details>
+<summary>Composer</summary>
 
 ```json
 {
@@ -62,135 +59,110 @@ Em projetos com Composer:
   }
 }
 ```
+</details>
 
-## Configuração
+## Setup
 
-### 1. A conta
+### 1. Account
 
-**Formulários › Configurações › Insider.** Os dois valores saem da tag que a Insider
-fornece — em `https://{nome}.api.useinsider.com/ins.js?id={id}`, o `{nome}` é o nome
-do parceiro e o `{id}` é o ID.
+**Forms › Settings › Insider.** Both values come from the tag Insider gives you —
+in `https://{name}.api.useinsider.com/ins.js?id={id}`.
 
-![Configurações da conta](docs/settings.png)
+![Account settings](docs/settings.png)
 
-Com **Tag da Insider** ligada, o plugin publica no `<head>` de todas as páginas:
+With the toggle on, the plugin prints this in `<head>` on every page:
 
 ```html
 <script>window.InsiderQueue = window.InsiderQueue || [];</script>
-<script async src="https://suaempresa.api.useinsider.com/ins.js?id=10000000"></script>
+<script async src="https://yourcompany.api.useinsider.com/ins.js?id=10000000"></script>
 ```
 
-A fila é declarada **antes** da tag porque o SDK lê o que já está nela ao carregar.
-Desligue o toggle se a tag já entra por um gerenciador de tags.
+The queue is declared **before** the tag because the SDK reads whatever is already in
+it on load. Turn the toggle off if a tag manager already injects the tag.
 
-### 2. O feed do formulário
+### 2. Feed
 
-**Formulários › [o formulário] › Configurações › Insider › Adicionar novo.**
+**Forms › [your form] › Settings › Insider › Add New.**
 
-#### Evento
+![Feed](docs/feed.png)
 
-![Evento](docs/evento.png)
+The **event name** must match the one registered in your Insider panel.
 
-O **nome do evento** precisa ser igual ao que está cadastrado no painel da Insider.
-Use um evento por tipo de formulário (`lead_contato`, `lead_orcamento`) quando quiser
-segmentar cada um separadamente, ou um só para todos com o formulário indo em um
-parâmetro.
+Insider needs **at least one identifier**. Without any, the contact is skipped and only
+the event fires.
 
-#### Identificação do contato
-
-![Identificação do contato](docs/identificacao.png)
-
-A Insider precisa de **pelo menos um identificador**: `uuid`, e-mail, telefone ou um
-identificador próprio. Sem nenhum, o envio é ignorado e só o evento é disparado.
-
-| Campo | Para que serve |
+| Field | Notes |
 | --- | --- |
-| **E-mail**, **Telefone** | Identificadores padrão. O telefone é convertido para E.164 (`(31) 9 8888-7777` → `+5531988887777`) |
-| **Nome** | Um campo de nome completo também preenche o sobrenome, quebrando no primeiro espaço |
-| **Sobrenome** | Só se o formulário perguntar separado; mapeado aqui, o nome não é quebrado |
-| **ID do usuário (uuid)** | O identificador principal da Insider: o id que a pessoa já tem no seu sistema. Deixe vazio se o formulário não souber esse id |
-| **Outros identificadores** | Identificador adicional com nome próprio, como o CPF. Chega na Insider como `c_cpf` |
+| **Email**, **Phone** | Standard identifiers. Phone is converted to E.164 (`(31) 9 8888-7777` → `+5531988887777`) |
+| **Name** | A full-name field also fills the surname, splitting at the first space |
+| **Surname** | Map it only if the form asks separately |
+| **User ID (uuid)** | Insider's main identifier: the id the person already has in your system. Leave empty if the form does not know it |
+| **Other identifiers** | An extra identifier with its own name, such as a national ID. Insider receives it as `c_cpf` |
 
-> **Não use o `uuid` para o CPF.** Se o seu back-end envia `uuid` com o id interno e o
-> site envia `uuid` com o CPF, a Insider guarda duas pessoas diferentes. O CPF vai em
-> *Outros identificadores*, e o plugin remove a pontuação antes de enviar — é assim
-> que um back-end costuma gravar, e um ponto de diferença já cria um segundo perfil.
+> **Do not put a document number in `uuid`.** If your back end sends `uuid` with an
+> internal id and the site sends `uuid` with a document, Insider keeps two people. Use
+> *Other identifiers* — the plugin strips punctuation before sending, which is how a
+> back end usually stores it.
 
-#### Consentimento
+A checked consent field becomes `true`. **Leave blank any channel the form does not ask about:**
+a data-processing consent is not a marketing opt-in, and Insider treats absence as
+"unknown".
 
-![Consentimento](docs/consentimento.png)
+- **Contact attributes** → the contact's `custom`
+- **Event parameters** → `event_parameters.custom`, accepting a form field or a fixed value
 
-Campo marcado vira `true`. **Deixe em branco o canal que o formulário não pergunta:**
-um aceite de tratamento de dados não é opt-in de marketing, e a Insider trata a
-ausência como "não informado".
+Numbers are sent as numbers (`15000`, not `"15000"`) so Insider can segment by range.
+A leading zero means a code, not a quantity: `01310` stays text.
 
-#### Atributos e parâmetros
+Use **Condition** to send only entries matching a rule.
 
-![Atributos do contato](docs/atributos.png)
+### 3. In the Insider panel
 
-- **Atributos do contato** → `custom` do contato. A chave precisa existir no painel
-  da Insider como atributo customizado.
-- **Parâmetros do evento** → `event_parameters.custom`. Aceita campo do formulário ou
-  valor fixo, útil para carimbar a origem.
+1. **Allow your domain** on the account.
+2. **Attributes › Create** — every key used in *Contact attributes*, with the right data
+   type (Number for amounts and counts, String otherwise).
+3. **Events › Create** — every event name used in your feeds, with its parameters.
 
-Valores numéricos são enviados como número (`15000`, não `"15000"`), senão a Insider
-não consegue segmentar por faixa. Um zero à esquerda marca código, não quantidade:
-`01310` continua texto.
+An attribute or event that does not exist in the panel is dropped on arrival.
 
-#### Condição
+## Testing
 
-Serve para enviar só quando o registro atender a uma regra — por exemplo, mandar
-apenas quem marcou um determinado assunto.
+Install [Insider Hits](https://chromewebstore.google.com/detail/insider-hits/dgfcbjjhlabibmpjlpdmlommhcpklkib):
+it adds a DevTools tab listing every hit, split by event.
 
-### 3. Antes de ir ao ar
+1. Open any page — a page view proves the domain is allowed.
+2. Submit the form. Two hits should follow: the contact and the event.
+3. In the panel, find the contact under **User Profiles** and the event under
+   **Event History**.
 
-No painel da Insider:
-
-1. **Libere o domínio do site** na conta.
-2. **Attributes › Create**: cada chave usada em *Atributos do contato*, com o Data Type
-   certo (Number para valor e quantidade, String para o resto).
-3. **Events › Create**: cada nome de evento usado nos feeds, com seus parâmetros.
-
-Atributo ou evento que não existe no painel é descartado na chegada.
-
-## Como validar
-
-1. Instale a extensão [Insider Hits](https://chromewebstore.google.com/detail/insider-hits/dgfcbjjhlabibmpjlpdmlommhcpklkib):
-   ela abre uma aba no DevTools com cada hit enviado, já separado por evento.
-2. Abra qualquer página e confirme que o page view sai — é o que prova que o domínio
-   está liberado.
-3. Preencha o formulário. Devem sair dois hits: o contato e o evento.
-4. No painel: procure o contato em **User Profiles** e o evento em **Event History**.
-
-Para ver o que sai sem depender da resposta da Insider, cole no console **antes** de
-enviar o formulário:
+To inspect the push without waiting on Insider, run this in the console **before**
+submitting:
 
 ```js
 (() => { const p = window.InsiderQueue.push.bind(window.InsiderQueue);
   window.InsiderQueue.push = (...a) => { console.log('InsiderQueue →', ...a); return p(...a); }; })()
 ```
 
-## Detalhes que evitam dor de cabeça
+## Gotchas
 
-- **Cache e delay de JS.** O plugin já se exclui do WP Rocket e do Perfmatters. Sem
-  isso o Rocket atrasa a tag até a primeira interação **e** minifica o `ins.js` numa
-  cópia local, que congela o SDK na versão em cache.
-- **Confirmação por redirecionamento.** O push viaja na confirmação do formulário; um
-  formulário configurado para redirecionar não tem onde carregá-lo. Use confirmação de
-  texto nos formulários que alimentam a Insider.
-- **Sem identificador, sem contato.** Um formulário que só pede assunto e mensagem
-  dispara o evento, mas não cria contato.
+- **Caching plugins.** The plugin already excludes itself from WP Rocket and
+  Perfmatters. Otherwise Rocket delays the tag until first interaction **and** minifies
+  `ins.js` into a local copy, freezing the SDK at the cached version.
+- **Redirect confirmations.** The push rides the form confirmation, and a redirect has
+  no markup to carry it. Use a text confirmation on forms that feed Insider.
+- **No identifier, no contact.** A form asking only for a subject and a message fires
+  the event but creates no contact.
 
-## Desenvolvimento
+## Development
 
-As regras de conversão (E.164, nome/sobrenome, consentimento, tipo e identificador)
-ficam em `includes/class-gf-insider-payload.php`, sem dependência do WordPress, e têm
-verificação própria:
+The conversion rules — E.164, name splitting, consent, typing, identifiers — live in
+`includes/class-gf-insider-payload.php` with no WordPress dependency, and have their
+own check:
 
 ```sh
 php tests/test-payload.php
 ```
 
-## Licença
+## License
 
-GPL-2.0-or-later.
+GPL-2.0-or-later
