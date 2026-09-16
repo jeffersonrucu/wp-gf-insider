@@ -119,26 +119,31 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 						'type'      => 'field_map',
 						'field_map' => array(
 							array(
-								'name'  => 'email',
-								'label' => esc_html__( 'E-mail', 'gf-insider' ),
+								'name'       => 'email',
+								'label'      => esc_html__( 'E-mail', 'gf-insider' ),
+								'field_type' => array( 'email', 'text', 'hidden' ),
 							),
 							array(
-								'name'  => 'phone_number',
-								'label' => esc_html__( 'Telefone', 'gf-insider' ),
+								'name'       => 'phone_number',
+								'label'      => esc_html__( 'Telefone', 'gf-insider' ),
+								'field_type' => array( 'phone', 'text', 'hidden' ),
 							),
 							array(
-								'name'    => 'name',
-								'label'   => esc_html__( 'Nome', 'gf-insider' ),
-								'tooltip' => esc_html__( 'Um campo de nome completo também preenche o sobrenome.', 'gf-insider' ),
+								'name'       => 'name',
+								'label'      => esc_html__( 'Nome', 'gf-insider' ),
+								'tooltip'    => esc_html__( 'Um campo de nome completo também preenche o sobrenome.', 'gf-insider' ),
+								'field_type' => array( 'name', 'text', 'hidden' ),
 							),
 							array(
-								'name'  => 'surname',
-								'label' => esc_html__( 'Sobrenome', 'gf-insider' ),
+								'name'       => 'surname',
+								'label'      => esc_html__( 'Sobrenome', 'gf-insider' ),
+								'field_type' => array( 'name', 'text', 'hidden' ),
 							),
 							array(
-								'name'    => 'uuid',
-								'label'   => esc_html__( 'Identificador único', 'gf-insider' ),
-								'tooltip' => esc_html__( 'O que identifica a pessoa na base da Insider, por exemplo o CPF.', 'gf-insider' ),
+								'name'       => 'uuid',
+								'label'      => esc_html__( 'Identificador único', 'gf-insider' ),
+								'tooltip'    => esc_html__( 'O que identifica a pessoa na base da Insider, por exemplo o CPF.', 'gf-insider' ),
+								'field_type' => array( 'text', 'number', 'email', 'hidden' ),
 							),
 						),
 					),
@@ -154,20 +159,24 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 						'type'      => 'field_map',
 						'field_map' => array(
 							array(
-								'name'  => 'gdpr_optin',
-								'label' => esc_html__( 'Consentimento de dados', 'gf-insider' ),
+								'name'       => 'gdpr_optin',
+								'label'      => esc_html__( 'Consentimento de dados', 'gf-insider' ),
+								'field_type' => array( 'consent', 'checkbox', 'radio', 'select', 'hidden' ),
 							),
 							array(
-								'name'  => 'email_optin',
-								'label' => esc_html__( 'Aceita e-mail', 'gf-insider' ),
+								'name'       => 'email_optin',
+								'label'      => esc_html__( 'Aceita e-mail', 'gf-insider' ),
+								'field_type' => array( 'consent', 'checkbox', 'radio', 'select', 'hidden' ),
 							),
 							array(
-								'name'  => 'sms_optin',
-								'label' => esc_html__( 'Aceita SMS', 'gf-insider' ),
+								'name'       => 'sms_optin',
+								'label'      => esc_html__( 'Aceita SMS', 'gf-insider' ),
+								'field_type' => array( 'consent', 'checkbox', 'radio', 'select', 'hidden' ),
 							),
 							array(
-								'name'  => 'whatsapp_optin',
-								'label' => esc_html__( 'Aceita WhatsApp', 'gf-insider' ),
+								'name'       => 'whatsapp_optin',
+								'label'      => esc_html__( 'Aceita WhatsApp', 'gf-insider' ),
+								'field_type' => array( 'consent', 'checkbox', 'radio', 'select', 'hidden' ),
 							),
 						),
 					),
@@ -187,6 +196,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 						),
 						'value_field' => array(
 							'title'      => esc_html__( 'Campo do formulário', 'gf-insider' ),
+							'choices'    => self::attribute_choices(),
 							'merge_tags' => true,
 						),
 					),
@@ -206,6 +216,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 						),
 						'value_field' => array(
 							'title'      => esc_html__( 'Campo do formulário', 'gf-insider' ),
+							'choices'    => self::attribute_choices(),
 							'merge_tags' => true,
 						),
 					),
@@ -237,6 +248,26 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 
 	public function get_menu_icon() {
 		return 'gform-icon--cog';
+	}
+
+	/**
+	 * Quebra de página, bloco de HTML e afins aparecem no mapa do Gravity Forms
+	 * e não carregam valor: listá-los só convida a um mapeamento que não envia.
+	 *
+	 * @return array<int, array<string, string>>
+	 */
+	private static function attribute_choices(): array {
+		$form = self::get_instance()->get_current_form();
+
+		if ( ! is_array( $form ) ) {
+			return array();
+		}
+
+		return self::get_field_map_choices(
+			(int) rgar( $form, 'id' ),
+			null,
+			array( 'html', 'page', 'section', 'captcha', 'fileupload' )
+		);
 	}
 
 	// ------------------------------------------------------------- processing
