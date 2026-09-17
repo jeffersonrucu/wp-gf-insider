@@ -50,9 +50,9 @@ and install it under **Plugins › Add New › Upload Plugin**.
   "package": {
     "name": "plugins/gf-insider",
     "type": "wordpress-plugin",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "dist": {
-      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.1.0/gf-insider-1.1.0.zip",
+      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.1.1/gf-insider-1.1.1.zip",
       "type": "zip"
     }
   }
@@ -68,6 +68,8 @@ and install it under **Plugins › Add New › Upload Plugin**.
 in `https://{name}.api.useinsider.com/ins.js?id={id}`. The **API key** is generated in the
 Insider panel under **Integration Settings › API Keys**, with the **Upsert** type; the name
 is also the `X-PARTNER-NAME` header of every send.
+If the key has an IP allowlist, add the server's **IPv4** address: the plugin always
+sends over IPv4, because the allowlist does not take IPv6.
 
 ![Account settings](docs/settings.png)
 

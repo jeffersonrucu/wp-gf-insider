@@ -298,6 +298,8 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 			return $entry;
 		}
 
+		add_action( 'http_api_curl', array( __CLASS__, 'force_ipv4' ), 10, 3 );
+
 		$body     = array( 'users' => array( $user ) );
 		$response = wp_remote_post(
 			self::UPSERT_URL,
@@ -312,6 +314,8 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 			)
 		);
 
+		remove_action( 'http_api_curl', array( __CLASS__, 'force_ipv4' ), 10 );
+
 		$code = (int) wp_remote_retrieve_response_code( $response );
 
 		if ( is_wp_error( $response ) || $code < 200 || $code > 299 ) {
@@ -325,6 +329,20 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 		$this->log_debug( __METHOD__ . '(): Insider answered ' . $code . '.' );
 
 		return $entry;
+	}
+
+	/**
+	 * Insider's API key allowlist takes IPv4 only, and cURL prefers IPv6 when the
+	 * host has it: the request then leaves from an address the key rejects with 403.
+	 *
+	 * @param resource|\CurlHandle $handle
+	 * @param array<string, mixed> $args
+	 * @param string               $url
+	 */
+	public static function force_ipv4( $handle, $args, $url ): void {
+		if ( self::UPSERT_URL === $url ) {
+			curl_setopt( $handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4 );
+		}
 	}
 
 	/**
