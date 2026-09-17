@@ -7,35 +7,34 @@ Insider tag. One feed per form, mapped in the admin — no code.
 
 ## How it works
 
-The push runs **in the visitor's browser**, through `window.InsiderQueue`, not through
-a server-side API call. Two reasons:
+On submission the plugin posts the entry to Insider's
+upsert API **from the server**,
+in the same shape a back end uses, so the site and the back end merge into one profile:
 
-- The lead stays tied to the session Insider already knows, so it is the same person
-  who browsed the site and can receive web push. A server-side upsert loses that link.
-- The **values come from the server**, built from the saved entry, so a multi-page form
-  sends every field — not just the last screen.
-
-What the plugin appends to the form confirmation:
-
-```js
-window.InsiderQueue.push({ type: 'user', value: {
-  email: 'maria@example.com',
-  phone_number: '+5531988887777',
-  name: 'Maria', surname: 'Silva',
-  custom_identifiers: { cpf: '52998224725' },
-  gdpr_optin: true,
-  custom: { city: 'Belo Horizonte', loan_amount: 15000 }
-}});
-window.InsiderQueue.push({ type: 'custom_event', value: [{
-  event_name: 'lead_contact',
-  event_parameters: { custom: { form_name: 'Contact' } }
-}]});
+```json
+{
+  "users": [{
+    "identifiers": { "cpf": "00000000000" },
+    "attributes": {
+      "name": "Fulano", "surname": "de Tal",
+      "phone_number": "+5511900000000", "gdpr_optin": true
+    },
+    "events": [{
+      "event_name": "lead_simulador",
+      "timestamp": "2026-01-20T20:50:00.000Z",
+      "event_params": { "custom": { "valor_emprestimo": 5000, "numero_parcelas": 12 } }
+    }]
+  }]
+}
 ```
+
+The values come from the saved entry, so a multi-page form sends every field, and a
+redirect confirmation or an ad blocker does not stop the send. A failed send is written
+as a note on the entry.
 
 ## Requirements
 
-WordPress 5.9+ · PHP 7.4+ · Gravity Forms 2.5+ · an Insider account with **your domain
-allowed** (without it the SDK loads but sends nothing).
+WordPress 5.9+ · PHP 7.4+ · Gravity Forms 2.5+ · an Insider account and an **Upsert API key**.
 
 ## Install
 
@@ -51,9 +50,9 @@ and install it under **Plugins › Add New › Upload Plugin**.
   "package": {
     "name": "plugins/gf-insider",
     "type": "wordpress-plugin",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "dist": {
-      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.0.0/gf-insider-1.0.0.zip",
+      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.1.0/gf-insider-1.1.0.zip",
       "type": "zip"
     }
   }
@@ -65,8 +64,10 @@ and install it under **Plugins › Add New › Upload Plugin**.
 
 ### 1. Account
 
-**Forms › Settings › Insider.** Both values come from the tag Insider gives you —
-in `https://{name}.api.useinsider.com/ins.js?id={id}`.
+**Forms › Settings › Insider.** Partner name and id come from the tag Insider gives you —
+in `https://{name}.api.useinsider.com/ins.js?id={id}`. The **API key** is generated in the
+Insider panel under **Integration Settings › API Keys**, with the **Upsert** type; the name
+is also the `X-PARTNER-NAME` header of every send.
 
 ![Account settings](docs/settings.png)
 
@@ -77,8 +78,8 @@ With the toggle on, the plugin prints this in `<head>` on every page:
 <script async src="https://yourcompany.api.useinsider.com/ins.js?id=10000000"></script>
 ```
 
-The queue is declared **before** the tag because the SDK reads whatever is already in
-it on load. Turn the toggle off if a tag manager already injects the tag.
+The tag only tracks browsing; the form data does not depend on it. Turn the toggle off
+if a tag manager already injects the tag.
 
 ### 2. Feed
 
@@ -88,16 +89,15 @@ it on load. Turn the toggle off if a tag manager already injects the tag.
 
 The **event name** must match the one registered in your Insider panel.
 
-Insider needs **at least one identifier**. Without any, the contact is skipped and only
-the event fires.
+Insider needs **at least one identifier**. Without any, nothing is sent.
 
 | Field | Notes |
 | --- | --- |
-| **Email**, **Phone** | Standard identifiers. Phone is converted to E.164 (`(31) 9 8888-7777` → `+5531988887777`) |
-| **Name** | A full-name field also fills the surname, splitting at the first space |
+| **Email**, **Phone** | Sent as attributes. Without a uuid or other identifier, the email identifies the contact, and without an email, the phone. Phone is converted to E.164 (`(11) 90000-0000` → `+5511900000000`) |
+| **Name** | First name only: a full-name field also fills the surname, splitting at the first space |
 | **Surname** | Map it only if the form asks separately |
 | **User ID (uuid)** | Insider's main identifier: the id the person already has in your system. Leave empty if the form does not know it |
-| **Other identifiers** | An extra identifier with its own name, such as a national ID. Insider receives it as `c_cpf` |
+| **Other identifiers** | An extra identifier with its own name, such as a national ID. Sent inside `identifiers` |
 
 > **Do not put a document number in `uuid`.** If your back end sends `uuid` with an
 > internal id and the site sends `uuid` with a document, Insider keeps two people. Use
@@ -108,8 +108,7 @@ A checked consent field becomes `true`. **Leave blank any channel the form does 
 a data-processing consent is not a marketing opt-in, and Insider treats absence as
 "unknown".
 
-- **Contact attributes** → the contact's `custom`
-- **Event parameters** → `event_parameters.custom`, accepting a form field or a fixed value
+- **Event parameters** → `events[].event_params.custom`, accepting a form field or a fixed value
 
 Numbers are sent as numbers (`15000`, not `"15000"`) so Insider can segment by range.
 A leading zero means a code, not a quantity: `01310` stays text.
@@ -118,40 +117,29 @@ Use **Condition** to send only entries matching a rule.
 
 ### 3. In the Insider panel
 
-1. **Allow your domain** on the account.
-2. **Attributes › Create** — every key used in *Contact attributes*, with the right data
-   type (Number for amounts and counts, String otherwise).
-3. **Events › Create** — every event name used in your feeds, with its parameters.
+1. **Integration Settings › API Keys** — generate the Upsert key.
+2. **Events › Create** — every event name used in your feeds, with its parameters and the
+   right data type (Number for amounts and counts, String otherwise).
+3. If the document is the identifier, register it as a **custom identifier** (`cpf`).
 
-An attribute or event that does not exist in the panel is dropped on arrival.
+An event or parameter that does not exist in the panel is dropped on arrival.
 
 ## Testing
 
-Install [Insider Hits](https://chromewebstore.google.com/detail/insider-hits/dgfcbjjhlabibmpjlpdmlommhcpklkib):
-it adds a DevTools tab listing every hit, split by event.
-
-1. Open any page — a page view proves the domain is allowed.
-2. Submit the form. Two hits should follow: the contact and the event.
+1. Enable logging under **Forms › Settings › Logging** and submit the form.
+2. A failed send leaves a note on the entry with the status and Insider's answer; a
+   successful one logs `Insider answered 200`.
 3. In the panel, find the contact under **User Profiles** and the event under
    **Event History**.
 
-To inspect the push without waiting on Insider, run this in the console **before**
-submitting:
-
-```js
-(() => { const p = window.InsiderQueue.push.bind(window.InsiderQueue);
-  window.InsiderQueue.push = (...a) => { console.log('InsiderQueue →', ...a); return p(...a); }; })()
-```
-
 ## Gotchas
 
-- **Caching plugins.** The plugin already excludes itself from WP Rocket and
+- **Caching plugins.** The plugin already excludes the tag from WP Rocket and
   Perfmatters. Otherwise Rocket delays the tag until first interaction **and** minifies
   `ins.js` into a local copy, freezing the SDK at the cached version.
-- **Redirect confirmations.** The push rides the form confirmation, and a redirect has
-  no markup to carry it. Use a text confirmation on forms that feed Insider.
-- **No identifier, no contact.** A form asking only for a subject and a message fires
-  the event but creates no contact.
+- **The send is synchronous.** It adds Insider's response time, capped at 10 s, to the
+  form submission.
+- **No identifier, no contact.** A form asking only for a subject and a message sends nothing.
 
 ## Development
 

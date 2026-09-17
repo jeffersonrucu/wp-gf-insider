@@ -1,6 +1,6 @@
 <?php
 /**
- * Turns entry values into the two structures the Insider web SDK accepts.
+ * Turns entry values into the body of Insider's upsert API.
  * Pure PHP on purpose: it is the part worth testing without WordPress.
  */
 
@@ -10,7 +10,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 final class GF_Insider_Payload {
 
-	/** Identifiers Insider reads from the user object, in its own spelling. */
+	/** Default attributes Insider reads from the user object, in its own spelling. */
 	const CONTACT_KEYS = array( 'uuid', 'email', 'phone_number', 'name', 'surname' );
 
 	/** Consent flags, all booleans on Insider's side. */
@@ -81,22 +81,30 @@ final class GF_Insider_Payload {
 	}
 
 	/**
-	 * @param array<string, mixed> $contact     Values keyed by CONTACT_KEYS.
-	 * @param array<string, mixed> $optins      Values keyed by OPTIN_KEYS.
-	 * @param array<string, mixed> $custom      Custom attributes, already keyed.
-	 * @param array<string, mixed> $identifiers Custom identifiers, already keyed.
+	 * GMT date as Gravity Forms stores it, in the format the upsert API expects.
+	 */
+	public static function timestamp( string $date_gmt ): string {
+		$time = strtotime( $date_gmt . ' UTC' );
+
+		return gmdate( 'Y-m-d\TH:i:s.000\Z', false === $time ? time() : $time );
+	}
+
+	/**
+	 * One entry of `users`. The document and the uuid identify the contact; without
+	 * them the email does, and without an email the phone.
+	 *
+	 * @param array<string, mixed>       $contact     Values keyed by CONTACT_KEYS.
+	 * @param array<string, mixed>       $optins      Values keyed by OPTIN_KEYS.
+	 * @param array<string, mixed>       $identifiers Custom identifiers, already keyed.
+	 * @param list<array<string, mixed>> $events      Built by event().
 	 *
 	 * @return array<string, mixed> Empty when there is no identifier to send.
 	 */
-	public static function user( array $contact, array $optins = array(), array $custom = array(), array $identifiers = array() ): array {
-		$user = array();
+	public static function user( array $contact, array $optins = array(), array $identifiers = array(), array $events = array() ): array {
+		$values = array();
 
 		foreach ( self::CONTACT_KEYS as $key ) {
 			$value = isset( $contact[ $key ] ) ? trim( (string) $contact[ $key ] ) : '';
-
-			if ( '' === $value ) {
-				continue;
-			}
 
 			if ( 'phone_number' === $key ) {
 				$value = self::phone( $value );
@@ -107,45 +115,63 @@ final class GF_Insider_Payload {
 			}
 
 			if ( '' !== $value ) {
-				$user[ $key ] = $value;
+				$values[ $key ] = $value;
 			}
 		}
 
 		// A name field holding the full name also fills the surname.
-		if ( isset( $user['name'] ) && ! isset( $user['surname'] ) ) {
-			list( $name, $surname ) = self::name_parts( $user['name'] );
+		if ( isset( $values['name'] ) && ! isset( $values['surname'] ) ) {
+			list( $name, $surname ) = self::name_parts( $values['name'] );
 
-			$user['name'] = $name;
+			$values['name'] = $name;
 
 			if ( '' !== $surname ) {
-				$user['surname'] = $surname;
+				$values['surname'] = $surname;
 			}
 		}
 
-		$identifiers = array_map(
+		$ids = array_map(
 			static fn ( $value ): string => self::identifier( (string) $value ),
 			self::clean( $identifiers )
 		);
 
-		// Without one of these Insider has no contact to attach the event to.
-		if ( ! isset( $user['uuid'] ) && ! isset( $user['email'] ) && ! isset( $user['phone_number'] ) && array() === $identifiers ) {
+		if ( isset( $values['uuid'] ) ) {
+			$ids['uuid'] = $values['uuid'];
+		}
+
+		foreach ( array( 'email', 'phone_number' ) as $key ) {
+			if ( array() === $ids && isset( $values[ $key ] ) ) {
+				$ids[ $key ] = $values[ $key ];
+			}
+		}
+
+		// Without an identifier Insider has no contact to attach the event to.
+		if ( array() === $ids ) {
 			return array();
 		}
 
-		if ( array() !== $identifiers ) {
-			$user['custom_identifiers'] = $identifiers;
+		$attributes = array();
+
+		foreach ( array( 'name', 'surname', 'email', 'phone_number' ) as $key ) {
+			if ( isset( $values[ $key ] ) ) {
+				$attributes[ $key ] = $values[ $key ];
+			}
 		}
 
 		foreach ( self::OPTIN_KEYS as $key ) {
 			if ( isset( $optins[ $key ] ) && '' !== (string) $optins[ $key ] ) {
-				$user[ $key ] = self::boolean( $optins[ $key ] );
+				$attributes[ $key ] = self::boolean( $optins[ $key ] );
 			}
 		}
 
-		$custom = self::clean( $custom );
+		$user = array( 'identifiers' => $ids );
 
-		if ( array() !== $custom ) {
-			$user['custom'] = $custom;
+		if ( array() !== $attributes ) {
+			$user['attributes'] = $attributes;
+		}
+
+		if ( array() !== $events ) {
+			$user['events'] = $events;
 		}
 
 		return $user;
@@ -156,27 +182,30 @@ final class GF_Insider_Payload {
 	 *
 	 * @return array<string, mixed> Empty when the event has no name.
 	 */
-	public static function event( string $name, array $parameters = array() ): array {
+	public static function event( string $name, string $timestamp, array $parameters = array() ): array {
 		$name = trim( $name );
 
 		if ( '' === $name ) {
 			return array();
 		}
 
-		$event = array( 'event_name' => $name );
+		$event = array(
+			'event_name' => $name,
+			'timestamp'  => $timestamp,
+		);
 
 		$parameters = self::clean( $parameters );
 
 		if ( array() !== $parameters ) {
-			$event['event_parameters'] = array( 'custom' => $parameters );
+			$event['event_params'] = array( 'custom' => $parameters );
 		}
 
 		return $event;
 	}
 
 	/**
-	 * A base do cliente guarda documento sem pontuação, e um identificador que
-	 * difere num ponto cria um segundo perfil em vez de unir os dois.
+	 * The client's base stores documents without punctuation, and an identifier
+	 * that differs by one dot creates a second profile instead of merging.
 	 */
 	private static function identifier( string $value ): string {
 		return preg_match( '#^[\d.\-/]+$#', $value ) === 1

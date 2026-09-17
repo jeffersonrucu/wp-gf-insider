@@ -1,7 +1,7 @@
 <?php
 /**
  * Gravity Forms feed add-on: one feed per form says which entry values become
- * the Insider contact, and which event the submission fires.
+ * the Insider contact, and which event the submission fires through the upsert API.
  */
 
 if ( ! defined( 'WPINC' ) ) {
@@ -18,16 +18,10 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 	protected $_title                    = 'Insider';
 	protected $_short_title              = 'Insider';
 
+	const UPSERT_URL = 'https://unification.useinsider.com/api/user/v1/upsert';
+
 	/** @var GF_Insider_Addon|null */
 	private static $instance = null;
-
-	/**
-	 * Pushes waiting to be printed, keyed by form id: a page can hold more than
-	 * one form, and only the submitted one gets the script.
-	 *
-	 * @var array<int, list<array<string, mixed>>>
-	 */
-	private $queue = array();
 
 	public static function get_instance(): GF_Insider_Addon {
 		if ( null === self::$instance ) {
@@ -35,13 +29,6 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 		}
 
 		return self::$instance;
-	}
-
-	public function init_frontend() {
-		parent::init_frontend();
-
-		// Late on purpose: the theme builds the confirmation markup at 10.
-		add_filter( 'gform_confirmation', array( $this, 'append_queue' ), 999, 2 );
 	}
 
 	// ---------------------------------------------------------------- settings
@@ -70,6 +57,15 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 						'class'    => 'small',
 						'required' => true,
 						'tooltip'  => esc_html__( 'O número depois de ?id= na tag.', 'gf-insider' ),
+					),
+					array(
+						'name'       => 'api_key',
+						'label'      => esc_html__( 'Chave da API', 'gf-insider' ),
+						'type'       => 'text',
+						'input_type' => 'password',
+						'class'      => 'medium',
+						'required'   => true,
+						'tooltip'    => esc_html__( 'Chave do tipo Upsert, gerada no painel da Insider em Integration Settings › API Keys. Sem ela nenhum envio sai.', 'gf-insider' ),
 					),
 					array(
 						'name'          => 'print_tag',
@@ -111,7 +107,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 			),
 			array(
 				'title'       => esc_html__( 'Identificação do contato', 'gf-insider' ),
-				'description' => esc_html__( 'A Insider precisa de pelo menos um identificador: uuid, e-mail, telefone ou um dos identificadores próprios abaixo. Sem nenhum deles o envio é ignorado.', 'gf-insider' ),
+				'description' => esc_html__( 'O CPF e o uuid vão em identifiers. Sem eles, o e-mail identifica; sem e-mail, o telefone. Sem nenhum, o envio é ignorado.', 'gf-insider' ),
 				'fields'      => array(
 					array(
 						'name'      => 'contact',
@@ -151,7 +147,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 						'name'        => 'customIdentifiers',
 						'label'       => esc_html__( 'Outros identificadores', 'gf-insider' ),
 						'type'        => 'generic_map',
-						'tooltip'     => esc_html__( 'Identificador adicional com nome próprio, como o CPF: chega na Insider como c_cpf e une este contato ao que o back-end já enviou. Não substitui o uuid.', 'gf-insider' ),
+						'tooltip'     => esc_html__( 'Identificador com nome próprio, como o CPF: vai em identifiers e une este contato ao que o back-end já enviou.', 'gf-insider' ),
 						'key_field'   => array(
 							'title'   => esc_html__( 'Nome do identificador', 'gf-insider' ),
 							'choices' => array(),
@@ -197,28 +193,8 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 				),
 			),
 			array(
-				'title'       => esc_html__( 'Atributos do contato', 'gf-insider' ),
-				'description' => esc_html__( 'Vão em custom no contato da Insider. A chave precisa existir no painel da Insider como atributo customizado.', 'gf-insider' ),
-				'fields'      => array(
-					array(
-						'name'      => 'userAttributes',
-						'label'     => '',
-						'type'      => 'generic_map',
-						'key_field' => array(
-							'title'   => esc_html__( 'Atributo', 'gf-insider' ),
-							'choices' => array(),
-						),
-						'value_field' => array(
-							'title'      => esc_html__( 'Campo do formulário', 'gf-insider' ),
-							'choices'    => self::attribute_choices(),
-							'merge_tags' => true,
-						),
-					),
-				),
-			),
-			array(
 				'title'       => esc_html__( 'Parâmetros do evento', 'gf-insider' ),
-				'description' => esc_html__( 'Vão em event_parameters.custom do evento.', 'gf-insider' ),
+				'description' => esc_html__( 'Os dados do formulário vão em event_params.custom do evento. O nome do parâmetro precisa existir no painel da Insider.', 'gf-insider' ),
 				'fields'      => array(
 					array(
 						'name'      => 'eventParameters',
@@ -294,80 +270,61 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 	 * @return array<string, mixed>
 	 */
 	public function process_feed( $feed, $entry, $form ) {
-		$form_id = (int) rgar( $form, 'id' );
+		$partner_name = trim( (string) $this->get_plugin_setting( 'partner_name' ) );
+		$api_key      = trim( (string) $this->get_plugin_setting( 'api_key' ) );
+
+		if ( '' === $partner_name || '' === $api_key ) {
+			$this->add_feed_error( esc_html__( 'Nome do parceiro ou chave da API não configurados.', 'gf-insider' ), $feed, $entry, $form );
+
+			return $entry;
+		}
+
+		$event = GF_Insider_Payload::event(
+			(string) rgars( $feed, 'meta/eventName' ),
+			GF_Insider_Payload::timestamp( (string) rgar( $entry, 'date_created' ) ),
+			$this->get_generic_map_fields( $feed, 'eventParameters', $form, $entry )
+		);
 
 		$user = GF_Insider_Payload::user(
 			$this->mapped_values( $feed, 'contact', $form, $entry ),
 			$this->mapped_values( $feed, 'optins', $form, $entry ),
-			$this->get_generic_map_fields( $feed, 'userAttributes', $form, $entry ),
-			$this->get_generic_map_fields( $feed, 'customIdentifiers', $form, $entry )
-		);
-
-		$event = GF_Insider_Payload::event(
-			(string) rgars( $feed, 'meta/eventName' ),
-			$this->get_generic_map_fields( $feed, 'eventParameters', $form, $entry )
+			$this->get_generic_map_fields( $feed, 'customIdentifiers', $form, $entry ),
+			array() === $event ? array() : array( $event )
 		);
 
 		if ( array() === $user ) {
-			$this->log_debug( __METHOD__ . '(): no identifier mapped, sending the event only.' );
-		} else {
-			$this->queue[ $form_id ][] = array(
-				'type'  => 'user',
-				'value' => $user,
-			);
+			$this->log_debug( __METHOD__ . '(): no identifier in the entry, nothing sent.' );
+
+			return $entry;
 		}
 
-		if ( array() !== $event ) {
-			$this->queue[ $form_id ][] = array(
-				'type'  => 'custom_event',
-				'value' => array( $event ),
-			);
+		$body     = array( 'users' => array( $user ) );
+		$response = wp_remote_post(
+			self::UPSERT_URL,
+			array(
+				'timeout' => 10,
+				'headers' => array(
+					'Content-Type'    => 'application/json',
+					'X-PARTNER-NAME'  => $partner_name,
+					'X-REQUEST-TOKEN' => $api_key,
+				),
+				'body'    => wp_json_encode( $body, JSON_UNESCAPED_UNICODE ),
+			)
+		);
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+
+		if ( is_wp_error( $response ) || $code < 200 || $code > 299 ) {
+			$message = is_wp_error( $response ) ? $response->get_error_message() : $code . ' ' . wp_remote_retrieve_body( $response );
+
+			$this->add_feed_error( sprintf( esc_html__( 'O envio para a Insider falhou: %s', 'gf-insider' ), $message ), $feed, $entry, $form );
+
+			return $entry;
 		}
+
+		$this->log_debug( __METHOD__ . '(): Insider answered ' . $code . '.' );
 
 		return $entry;
-	}
-
-	/**
-	 * The push rides the confirmation so it runs in the visitor's browser, where
-	 * the SDK already knows who this device is. A redirect carries no markup.
-	 *
-	 * @param string|array<string, mixed> $confirmation
-	 * @param array<string, mixed>        $form
-	 *
-	 * @return string|array<string, mixed>
-	 */
-	public function append_queue( $confirmation, $form ) {
-		$form_id = (int) rgar( $form, 'id' );
-
-		if ( ! is_string( $confirmation ) || empty( $this->queue[ $form_id ] ) ) {
-			return $confirmation;
-		}
-
-		$pushes = '';
-
-		foreach ( $this->queue[ $form_id ] as $push ) {
-			$pushes .= sprintf( 'window.InsiderQueue.push(%s);', $this->encode( $push ) );
-		}
-
-		unset( $this->queue[ $form_id ] );
-
-		return $confirmation . sprintf(
-			'<script>window.InsiderQueue = window.InsiderQueue || [];%s</script>',
-			$pushes
-		);
-	}
-
-	/**
-	 * Entry values reach a `<script>` block, so every character that could close
-	 * it early is escaped as a unicode sequence.
-	 *
-	 * @param array<string, mixed> $data
-	 */
-	private function encode( array $data ): string {
-		return (string) wp_json_encode(
-			$data,
-			JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE
-		);
 	}
 
 	/**

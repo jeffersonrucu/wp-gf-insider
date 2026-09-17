@@ -4,8 +4,8 @@
  *
  * Plugin Name:       Insider for Gravity Forms
  * Plugin URI:        https://github.com/jeffersonrucu/wp-gf-insider
- * Description:       Sends Gravity Forms submissions to Insider through the web SDK queue, mapped per form in the panel, and prints the Insider tag.
- * Version:           1.0.0
+ * Description:       Sends Gravity Forms submissions to Insider through the upsert API, mapped per form in the panel, and prints the Insider tag.
+ * Version:           1.1.0
  * Requires at least: 5.9
  * Requires PHP:      7.4
  * Requires Plugins:  gravityforms
