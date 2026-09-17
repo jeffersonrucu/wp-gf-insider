@@ -326,6 +326,15 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 			return $entry;
 		}
 
+		$body = wp_remote_retrieve_body( $response );
+
+		// Insider answers 200 to a rejected user, with the reason in the body.
+		if ( (int) rgars( (array) json_decode( $body, true ), 'data/fail/count' ) > 0 ) {
+			$this->add_feed_error( sprintf( esc_html__( 'A Insider recusou o envio: %s', 'gf-insider' ), $body ), $feed, $entry, $form );
+
+			return $entry;
+		}
+
 		$this->log_debug( __METHOD__ . '(): Insider answered ' . $code . '.' );
 
 		return $entry;

@@ -3,7 +3,7 @@ Contributors: jeffersonrucu
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.txt
 
@@ -28,6 +28,10 @@ minificação do WP Rocket e do Perfmatters, que servem uma cópia local do SDK.
 2. Em cada formulário, abra Configurações › Insider e crie um feed.
 
 == Changelog ==
+
+= 1.1.2 =
+* Identificador próprio, como o CPF, vai em identifiers.custom: na raiz a Insider recusa o usuário.
+* Recusa respondida com 200 vira nota de erro na entrada.
 
 = 1.1.1 =
 * A chamada à API sai por IPv4: a lista de IPs da chave da Insider não aceita IPv6, e o servidor com IPv6 recebia 403.

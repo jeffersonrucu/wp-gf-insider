@@ -130,10 +130,14 @@ final class GF_Insider_Payload {
 			}
 		}
 
-		$ids = array_map(
+		// Insider takes uuid, email and phone_number at the root and every other
+		// identifier under `custom`; a custom one at the root fails the whole user.
+		$custom = array_map(
 			static fn ( $value ): string => self::identifier( (string) $value ),
 			self::clean( $identifiers )
 		);
+
+		$ids = array() === $custom ? array() : array( 'custom' => $custom );
 
 		if ( isset( $values['uuid'] ) ) {
 			$ids['uuid'] = $values['uuid'];

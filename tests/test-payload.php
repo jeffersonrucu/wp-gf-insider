@@ -59,7 +59,7 @@ check(
 		array( $event )
 	),
 	array(
-		'identifiers' => array( 'cpf' => '00000000000' ),
+		'identifiers' => array( 'custom' => array( 'cpf' => '00000000000' ) ),
 		'attributes'  => array(
 			'name'         => 'Fulano',
 			'surname'      => 'de Tal',
@@ -80,7 +80,7 @@ check(
 	'uuid entra junto do CPF',
 	GF_Insider_Payload::user( array( 'uuid' => '0000', 'email' => 'fulano@exemplo.com.br' ), array(), array( 'cpf' => '00000000000' ) ),
 	array(
-		'identifiers' => array( 'cpf' => '00000000000', 'uuid' => '0000' ),
+		'identifiers' => array( 'custom' => array( 'cpf' => '00000000000' ), 'uuid' => '0000' ),
 		'attributes'  => array( 'email' => 'fulano@exemplo.com.br' ),
 	)
 );
@@ -121,7 +121,7 @@ check(
 check(
 	'identificador não numérico fica como veio',
 	GF_Insider_Payload::user( array(), array(), array( 'matricula' => 'AB-123' ) ),
-	array( 'identifiers' => array( 'matricula' => 'AB-123' ) )
+	array( 'identifiers' => array( 'custom' => array( 'matricula' => 'AB-123' ) ) )
 );
 
 check( 'evento sem nome', GF_Insider_Payload::event( '  ', '2026-01-20T20:50:00.000Z' ), array() );
