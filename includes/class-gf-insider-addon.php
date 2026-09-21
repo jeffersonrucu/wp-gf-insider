@@ -20,6 +20,8 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 
 	const UPSERT_URL = 'https://unification.useinsider.com/api/user/v1/upsert';
 
+	const PROFILE_URL = 'https://unification.useinsider.com/api/user/v1/profile';
+
 	/** @var GF_Insider_Addon|null */
 	private static $instance = null;
 
@@ -298,23 +300,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 			return $entry;
 		}
 
-		add_action( 'http_api_curl', array( __CLASS__, 'force_ipv4' ), 10, 3 );
-
-		$body     = array( 'users' => array( $user ) );
-		$response = wp_remote_post(
-			self::UPSERT_URL,
-			array(
-				'timeout' => 10,
-				'headers' => array(
-					'Content-Type'    => 'application/json',
-					'X-PARTNER-NAME'  => $partner_name,
-					'X-REQUEST-TOKEN' => $api_key,
-				),
-				'body'    => wp_json_encode( $body, JSON_UNESCAPED_UNICODE ),
-			)
-		);
-
-		remove_action( 'http_api_curl', array( __CLASS__, 'force_ipv4' ), 10 );
+		$response = $this->post( self::UPSERT_URL, array( 'users' => array( $user ) ) );
 
 		$code = (int) wp_remote_retrieve_response_code( $response );
 
@@ -337,7 +323,121 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 
 		$this->log_debug( __METHOD__ . '(): Insider answered ' . $code . '.' );
 
+		// The upsert answer carries no profile id; the entry screen looks it up later.
+		gform_update_meta( (int) rgar( $entry, 'id' ), 'insider_identifiers', wp_json_encode( $user['identifiers'] ) );
+
 		return $entry;
+	}
+
+	/**
+	 * @param array<string, mixed> $body
+	 *
+	 * @return array<string, mixed>|WP_Error
+	 */
+	private function post( string $url, array $body ) {
+		add_action( 'http_api_curl', array( __CLASS__, 'force_ipv4' ), 10, 3 );
+
+		$response = wp_remote_post(
+			$url,
+			array(
+				'timeout' => 10,
+				'headers' => array(
+					'Content-Type'    => 'application/json',
+					'X-PARTNER-NAME'  => trim( (string) $this->get_plugin_setting( 'partner_name' ) ),
+					'X-REQUEST-TOKEN' => trim( (string) $this->get_plugin_setting( 'api_key' ) ),
+				),
+				'body'    => wp_json_encode( $body, JSON_UNESCAPED_UNICODE ),
+			)
+		);
+
+		remove_action( 'http_api_curl', array( __CLASS__, 'force_ipv4' ), 10 );
+
+		return $response;
+	}
+
+	// ------------------------------------------------------------ entry screen
+
+	public function init_admin() {
+		parent::init_admin();
+
+		add_filter( 'gform_entry_detail_meta_boxes', array( $this, 'entry_meta_boxes' ), 10, 3 );
+	}
+
+	/**
+	 * @param array<string, array<string, mixed>> $meta_boxes
+	 * @param array<string, mixed>                $entry
+	 * @param array<string, mixed>                $form
+	 *
+	 * @return array<string, array<string, mixed>>
+	 */
+	public function entry_meta_boxes( $meta_boxes, $entry, $form ) {
+		if ( '' === (string) gform_get_meta( (int) rgar( $entry, 'id' ), 'insider_identifiers' ) ) {
+			return $meta_boxes;
+		}
+
+		$meta_boxes['gf_insider'] = array(
+			'title'    => esc_html__( 'Insider', 'gf-insider' ),
+			'callback' => array( $this, 'render_profile_box' ),
+			'context'  => 'side',
+		);
+
+		return $meta_boxes;
+	}
+
+	/**
+	 * @param array<string, mixed> $args
+	 */
+	public function render_profile_box( $args ): void {
+		$insider_id = $this->insider_id( (int) rgars( $args, 'entry/id' ) );
+
+		if ( '' === $insider_id ) {
+			echo esc_html__( 'Perfil ainda não encontrado na Insider. Recarregue em alguns minutos.', 'gf-insider' );
+
+			return;
+		}
+
+		$url = sprintf(
+			'https://%s.inone.useinsider.com/user-profiles/%s',
+			rawurlencode( trim( (string) $this->get_plugin_setting( 'partner_name' ) ) ),
+			rawurlencode( $insider_id )
+		);
+
+		printf(
+			'<a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a>',
+			esc_url( $url ),
+			esc_html__( 'Ver perfil na Insider One', 'gf-insider' )
+		);
+	}
+
+	/**
+	 * Resolved on first view and cached, so the submission never waits on it
+	 * and a profile Insider has not indexed yet is retried on the next view.
+	 */
+	private function insider_id( int $entry_id ): string {
+		$cached = (string) gform_get_meta( $entry_id, 'insider_id' );
+
+		if ( '' !== $cached ) {
+			return $cached;
+		}
+
+		$identifiers = json_decode( (string) gform_get_meta( $entry_id, 'insider_identifiers' ), true );
+
+		if ( ! is_array( $identifiers ) ) {
+			return '';
+		}
+
+		$response   = $this->post( self::PROFILE_URL, array( 'identifiers' => $identifiers, 'attributes' => array( 'email' ) ) );
+		$insider_id = (string) rgars( (array) json_decode( wp_remote_retrieve_body( $response ), true ), 'attributes/iid' );
+
+		if ( '' === $insider_id ) {
+			$this->log_debug( __METHOD__ . '(): no profile for entry ' . $entry_id . ': ' . wp_remote_retrieve_body( $response ) );
+
+			return '';
+		}
+
+		gform_update_meta( $entry_id, 'insider_id', $insider_id );
+
+		return $insider_id;
 	}
 
 	/**
@@ -349,7 +449,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 	 * @param string               $url
 	 */
 	public static function force_ipv4( $handle, $args, $url ): void {
-		if ( self::UPSERT_URL === $url ) {
+		if ( 0 === strpos( $url, 'https://unification.useinsider.com/' ) ) {
 			curl_setopt( $handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4 );
 		}
 	}
