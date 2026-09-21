@@ -3,7 +3,7 @@ Contributors: jeffersonrucu
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.3
+Stable tag: 1.1.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.txt
 
@@ -28,6 +28,9 @@ minificação do WP Rocket e do Perfmatters, que servem uma cópia local do SDK.
 2. Em cada formulário, abra Configurações › Insider e crie um feed.
 
 == Changelog ==
+
+= 1.1.4 =
+* O link do perfil pede o iid à Insider: sem ele na lista de atributos, a API responde vazio.
 
 = 1.1.3 =
 * Detalhe da entrada ganha o link para o perfil do contato no painel da Insider One.

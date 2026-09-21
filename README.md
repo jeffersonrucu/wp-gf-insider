@@ -50,9 +50,9 @@ and install it under **Plugins › Add New › Upload Plugin**.
   "package": {
     "name": "plugins/gf-insider",
     "type": "wordpress-plugin",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "dist": {
-      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.1.3/gf-insider-1.1.3.zip",
+      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.1.4/gf-insider-1.1.4.zip",
       "type": "zip"
     }
   }

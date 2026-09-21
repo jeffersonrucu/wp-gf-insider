@@ -426,7 +426,7 @@ final class GF_Insider_Addon extends GFFeedAddOn {
 			return '';
 		}
 
-		$response   = $this->post( self::PROFILE_URL, array( 'identifiers' => $identifiers, 'attributes' => array( 'email' ) ) );
+		$response   = $this->post( self::PROFILE_URL, array( 'identifiers' => $identifiers, 'attributes' => array( 'iid' ) ) );
 		$insider_id = (string) rgars( (array) json_decode( wp_remote_retrieve_body( $response ), true ), 'attributes/iid' );
 
 		if ( '' === $insider_id ) {
