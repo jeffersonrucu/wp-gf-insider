@@ -1,6 +1,6 @@
 <?php
 /**
- * The Insider tag in the head, and the cache plugins that would hold it back.
+ * The Insider tag in the head, kept out of the cache plugins' minification.
  */
 
 if ( ! defined( 'WPINC' ) ) {
@@ -9,19 +9,13 @@ if ( ! defined( 'WPINC' ) ) {
 
 final class GF_Insider_Tag {
 
-	/**
-	 * Both the tag and the queue that feeds it: a cache plugin matches these
-	 * against the whole tag, so the inline one is caught by its own variable.
-	 */
-	const EXCLUSIONS = array( 'useinsider.com', 'InsiderQueue' );
+	const EXCLUSIONS = array( 'useinsider.com' );
 
 	public static function init(): void {
 		add_action( 'wp_head', array( __CLASS__, 'render' ), 1 );
-		add_filter( 'rocket_delay_js_exclusions', array( __CLASS__, 'exclude' ) );
-		add_filter( 'perfmatters_delay_js_exclusions', array( __CLASS__, 'exclude' ) );
 
-		// Minification runs first and rewrites the src to a local copy, which
-		// freezes the SDK and hides it from the delay exclusion above.
+		// Minification would rewrite the src to a local copy and freeze the SDK.
+		// Delaying it is left to the cache plugin: the send goes through the server.
 		add_filter( 'rocket_minify_excluded_external_js', array( __CLASS__, 'exclude' ) );
 	}
 
