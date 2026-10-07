@@ -50,9 +50,9 @@ and install it under **Plugins › Add New › Upload Plugin**.
   "package": {
     "name": "plugins/gf-insider",
     "type": "wordpress-plugin",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "dist": {
-      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.1.4/gf-insider-1.1.4.zip",
+      "url": "https://github.com/jeffersonrucu/wp-gf-insider/releases/download/v1.1.5/gf-insider-1.1.5.zip",
       "type": "zip"
     }
   }
@@ -136,9 +136,10 @@ An event or parameter that does not exist in the panel is dropped on arrival.
 
 ## Gotchas
 
-- **Caching plugins.** The plugin already excludes the tag from WP Rocket and
-  Perfmatters. Otherwise Rocket delays the tag until first interaction **and** minifies
-  `ins.js` into a local copy, freezing the SDK at the cached version.
+- **Caching plugins.** The plugin excludes `ins.js` from WP Rocket's minification,
+  which would freeze the SDK at a local copy. It does not exclude it from Delay JS:
+  the send goes through the server, so delaying the tag until first interaction only
+  postpones the SDK's own page view and on-site campaigns.
 - **The send is synchronous.** It adds Insider's response time, capped at 10 s, to the
   form submission.
 - **No identifier, no contact.** A form asking only for a subject and a message sends nothing.

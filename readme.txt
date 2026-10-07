@@ -3,7 +3,7 @@ Contributors: jeffersonrucu
 Requires at least: 5.9
 Tested up to: 6.8
 Requires PHP: 7.4
-Stable tag: 1.1.4
+Stable tag: 1.1.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.txt
 
@@ -19,8 +19,10 @@ O envio sai do servidor, pela API de upsert, no mesmo formato que o back-end usa
 o CPF em `identifiers`, nome e contato em `attributes` e os dados do formulário em
 `events[].event_params.custom`. Um envio com falha vira nota na entrada.
 
-O plugin também publica a tag da Insider no `<head>` e a protege do atraso e da
-minificação do WP Rocket e do Perfmatters, que servem uma cópia local do SDK.
+O plugin também publica a tag da Insider no `<head>` e a protege da minificação
+do WP Rocket, que serviria uma cópia local do SDK. O atraso até a primeira
+interação fica a cargo do plugin de cache: o envio sai do servidor e não depende
+do SDK carregado.
 
 == Installation ==
 
@@ -28,6 +30,9 @@ minificação do WP Rocket e do Perfmatters, que servem uma cópia local do SDK.
 2. Em cada formulário, abra Configurações › Insider e crie um feed.
 
 == Changelog ==
+
+= 1.1.5 =
+* A tag deixa de ser excluída do Delay JS do WP Rocket e do Perfmatters: o envio sai do servidor, e o SDK bloqueava a thread principal em toda página.
 
 = 1.1.4 =
 * O link do perfil pede o iid à Insider: sem ele na lista de atributos, a API responde vazio.
